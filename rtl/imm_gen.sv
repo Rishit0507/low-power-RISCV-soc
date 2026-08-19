@@ -6,32 +6,80 @@
 //J-type → JAL
 
 module imm_gen (
-    input  logic [31:0] instr,
+
+    // Complete 32-bit instruction
+    input logic [31:0] instr,
+
+    // Immediate format selected by the decoder
+    input logic [2:0] imm_type,
+
+    // Generated 32-bit immediate
     output logic [31:0] imm
+
 );
 
-    logic [6:0] opcode;
+    // Immediate type definitions.
+    // These MUST match decoder.sv.
 
-    assign opcode = instr[6:0];
+    localparam IMM_NONE = 3'b000;
+    localparam IMM_I    = 3'b001;
+    localparam IMM_S    = 3'b010;
+    localparam IMM_B    = 3'b011;
+    localparam IMM_U    = 3'b100;
+    localparam IMM_J    = 3'b101;
+
 
     always_comb begin
 
-        case (opcode)
+        case (imm_type)
 
+            // ----------------------------------------------------
             // I-type
-            7'b0010011,    // OP-IMM
-            7'b0000011,    // LOAD
-            7'b1100111:    // JALR
-                imm = {{20{instr[31]}}, instr[31:20]};
+            //
+            // Bits:
+            // [31:20]
+            //
+            // Sign extend 12-bit immediate to 32 bits.
+            // ----------------------------------------------------
 
+            IMM_I: begin
+
+                imm = {{20{instr[31]}},
+                       instr[31:20]};
+
+            end
+
+
+            // ----------------------------------------------------
             // S-type
-            7'b0100011:    // STORE
+            //
+            // Used by SW.
+            //
+            // Immediate is split between:
+            // [31:25] and [11:7]
+            // ----------------------------------------------------
+
+            IMM_S: begin
+
                 imm = {{20{instr[31]}},
                        instr[31:25],
                        instr[11:7]};
 
+            end
+
+
+            // ----------------------------------------------------
             // B-type
-            7'b1100011:    // BRANCH
+            //
+            // Used by BEQ/BNE.
+            //
+            // The immediate is scattered across the instruction.
+            // The lowest bit is always 0 because branch targets
+            // are aligned to 2-byte boundaries.
+            // ----------------------------------------------------
+
+            IMM_B: begin
+
                 imm = {{19{instr[31]}},
                        instr[31],
                        instr[7],
@@ -39,13 +87,36 @@ module imm_gen (
                        instr[11:8],
                        1'b0};
 
-            // U-type
-            7'b0110111,    // LUI
-            7'b0010111:    // AUIPC
-                imm = {instr[31:12], 12'b0};
+            end
 
+
+            // ----------------------------------------------------
+            // U-type
+            //
+            // Used by LUI/AUIPC.
+            //
+            // Lower 12 bits are zero.
+            // ----------------------------------------------------
+
+            IMM_U: begin
+
+                imm = {instr[31:12],
+                       12'b0};
+
+            end
+
+
+            // ----------------------------------------------------
             // J-type
-            7'b1101111:    // JAL
+            //
+            // Used by JAL.
+            //
+            // Immediate bits are scattered across the instruction.
+            // Lowest bit is always 0.
+            // ----------------------------------------------------
+
+            IMM_J: begin
+
                 imm = {{11{instr[31]}},
                        instr[31],
                        instr[19:12],
@@ -53,8 +124,18 @@ module imm_gen (
                        instr[30:21],
                        1'b0};
 
-            default:
+            end
+
+
+            // ----------------------------------------------------
+            // No immediate
+            // ----------------------------------------------------
+
+            default: begin
+
                 imm = 32'b0;
+
+            end
 
         endcase
 
